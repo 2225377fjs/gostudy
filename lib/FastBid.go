@@ -233,7 +233,7 @@ func (s *FastBid) fastBid(listid int, amout float32) {
 				time.Sleep(300 * time.Millisecond)
 				BidMoney(listid, lastMoney, s.users[1].AccessToken, s.users[1].Name, s.users[1].UseHongbao)
 
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(40 * time.Millisecond)
 				BidMoney(listid, lastMoney, s.users[2].AccessToken, s.users[2].Name, s.users[2].UseHongbao)
 
 				time.Sleep(350 * time.Millisecond)
