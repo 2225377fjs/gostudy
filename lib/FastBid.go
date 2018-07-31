@@ -181,7 +181,10 @@ func (s *FastBid) fastBid(listid int, amout float32) {
 				money += 40
 			}
 		}
-		if personInfo.ResultContent.BalAmount > 1000 {
+		if personInfo.ResultContent.BalAmount > 4000 {
+			Log("###########have other debet will going to 0   ", listid)
+			money = 0
+		} else if personInfo.ResultContent.BalAmount > 1000 {
 			Log("###########have other debet   ", listid)
 			money = 50
 		}
@@ -222,15 +225,16 @@ func (s *FastBid) fastBid(listid int, amout float32) {
 				Log("+++++++++++look  look fast web status is ok now , wait openapi status  ", listid)
 				Log("+++++++++++look  look fast web status is ok now , wait openapi status  ", listid)
 				Log("+++++++++++look  look fast web status is ok now , wait openapi status  ", listid)
-				time.Sleep(1980 * time.Millisecond)
+				lastMoney := int(atomic.LoadInt32(&canBidMoney))
+
+				time.Sleep(2260 * time.Millisecond)
 				Log("!!!!!!!!!!!!!!!!!#### look fast bid now   ", listid)
 				Log("!!!!!!!!!!!!!!!!!#### look fast bid now   ", listid)
 				Log("!!!!!!!!!!!!!!!!!#### look fast bid now   ", listid)
 
-				lastMoney := int(atomic.LoadInt32(&canBidMoney))
 				go BidMoney(listid, lastMoney, user.AccessToken, user.Name, user.UseHongbao)
 
-				time.Sleep(300 * time.Millisecond)
+				time.Sleep(20 * time.Millisecond)
 				go BidMoney(listid, lastMoney, s.users[1].AccessToken, s.users[1].Name, s.users[1].UseHongbao)
 
 				time.Sleep(40 * time.Millisecond)
