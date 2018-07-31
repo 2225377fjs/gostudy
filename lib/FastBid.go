@@ -228,13 +228,13 @@ func (s *FastBid) fastBid(listid int, amout float32) {
 				Log("!!!!!!!!!!!!!!!!!#### look fast bid now   ", listid)
 
 				lastMoney := int(atomic.LoadInt32(&canBidMoney))
-				BidMoney(listid, lastMoney, user.AccessToken, user.Name, user.UseHongbao)
+				go BidMoney(listid, lastMoney, user.AccessToken, user.Name, user.UseHongbao)
 
 				time.Sleep(300 * time.Millisecond)
-				BidMoney(listid, lastMoney, s.users[1].AccessToken, s.users[1].Name, s.users[1].UseHongbao)
+				go BidMoney(listid, lastMoney, s.users[1].AccessToken, s.users[1].Name, s.users[1].UseHongbao)
 
 				time.Sleep(40 * time.Millisecond)
-				BidMoney(listid, lastMoney, s.users[2].AccessToken, s.users[2].Name, s.users[2].UseHongbao)
+				go BidMoney(listid, lastMoney, s.users[2].AccessToken, s.users[2].Name, s.users[2].UseHongbao)
 
 				time.Sleep(350 * time.Millisecond)
 				s.releaseInBidWait()

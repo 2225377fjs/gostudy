@@ -137,7 +137,7 @@ func GetCanBidNow(appInfo *PpAppInfo) *CanBidResponse{
 
 
 	timeStr := time.Now().UTC().Format("2006-01-02 15:04:05")
-	reqest, _ := http.NewRequest("POST", "https://openapi.ppdai.com/invest/LLoanInfoService/LoanList", strings.NewReader(bodyStr))
+	reqest, _ := http.NewRequest("POST", "https://openapi.ppdai.com/listing/openapiNoAuth/loanList", strings.NewReader(bodyStr))
 	reqest.Header.Set("Content-Type", "application/json;charset=utf-8")
 	reqest.Header.Set("Connection", "keep-alive")
 	reqest.Header.Set("X-PPD-APPID", appInfo.Appid)
