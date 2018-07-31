@@ -125,7 +125,7 @@ func (s *CanBidItem) DoBid() {
 * 通过api获取可投的标列表
  */
 func GetCanBidNow(appInfo *PpAppInfo) *CanBidResponse{
-	ss, _ := time.ParseDuration("-6s")
+	ss, _ := time.ParseDuration("-15s")
 	now := time.Now()
 	now = now.Add(ss)
 	message := BidRequestData{PageIndex: 1, StartDateTime: now.Format("2006-01-02 15:04:05")}
