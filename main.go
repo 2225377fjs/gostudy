@@ -37,6 +37,8 @@ func main() {
 	tData, _ := ioutil.ReadFile("info.json")
 	json.Unmarshal(tData, &tList)
 
+
+
 	var fastUseApp *lib.App = nil
 
 	for index, item := range tList {
@@ -44,6 +46,7 @@ func main() {
 		app := lib.NewApp(aa)
 		app.SetUseInfo(nowPpInfo)
 		app.SetInterval(item.Interval * int64(lib.ServerConfig.ServerNum))
+
 		if index == 0 {
 			fastUseApp = app
 		}

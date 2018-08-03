@@ -192,9 +192,14 @@ func (s *App) doBid(appInfo *PpAppInfo) {
 				continue
 			}
 
-			for _, user := range s.users {
-				go BidMoney(item.ListingId, beginAmount, user.AccessToken, user.Name, user.UseHongbao)
+			go BidMoney(item.ListingId, beginAmount, s.users[0].AccessToken, s.users[0].Name, s.users[0].UseHongbao)
+			go BidMoney(item.ListingId, beginAmount, s.users[1].AccessToken, s.users[1].Name, s.users[1].UseHongbao)
+			go BidMoney(item.ListingId, beginAmount, s.users[2].AccessToken, s.users[2].Name, s.users[2].UseHongbao)
+
+			if beginAmount > 160 {
+				go BidMoney(item.ListingId, beginAmount, s.users[3].AccessToken, s.users[3].Name, s.users[3].UseHongbao)
 			}
+
 		}
 	}
 }
@@ -211,9 +216,16 @@ func (s *App) doWeb(listid int, amount, remain float32 ) {
 			return
 		}
 		Log("########## bid through fast info   ", listid)
-		for _, user := range s.users {
-			go BidMoney(listid, money, user.AccessToken, user.Name, user.UseHongbao)
+
+
+		go BidMoney(listid, money, s.users[0].AccessToken, s.users[0].Name, s.users[0].UseHongbao)
+		go BidMoney(listid, money, s.users[1].AccessToken, s.users[1].Name, s.users[1].UseHongbao)
+		go BidMoney(listid, money, s.users[2].AccessToken, s.users[2].Name, s.users[2].UseHongbao)
+
+		if money > 160 {
+			go BidMoney(listid, money, s.users[3].AccessToken, s.users[3].Name, s.users[3].UseHongbao)
 		}
+
 		return
 	} else {
 		Log("********* no fast info ", listid)
@@ -229,8 +241,12 @@ func (s *App) doWeb(listid int, amount, remain float32 ) {
 	afterInfo := time.Now()
 
 	Log("bid process info #####  ,", listid, begin, afterInfo)
-	for _, user := range s.users {
-		go BidMoney(listid, beginAmount, user.AccessToken, user.Name, user.UseHongbao)
+	go BidMoney(listid, beginAmount, s.users[0].AccessToken, s.users[0].Name, s.users[0].UseHongbao)
+	go BidMoney(listid, beginAmount, s.users[1].AccessToken, s.users[1].Name, s.users[1].UseHongbao)
+	go BidMoney(listid, beginAmount, s.users[2].AccessToken, s.users[2].Name, s.users[2].UseHongbao)
+
+	if beginAmount > 160 {
+		go BidMoney(listid, beginAmount, s.users[3].AccessToken, s.users[3].Name, s.users[3].UseHongbao)
 	}
 
 }

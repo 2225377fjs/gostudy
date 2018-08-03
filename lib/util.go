@@ -667,11 +667,13 @@ func GetCanBidMoney(listid int, amount, remain float32) int {
 
 
 
-	// 凡是还有债务的借款，或者有提前5天以上的，最多投80
-	if staticInfo.OwingAmount > 0 || no3{
-		if beginAmount > 80 {
-			beginAmount = 80
-		}
+	// 凡是还有债务的借款，最多投80
+	if staticInfo.OwingAmount > 0 {
+		beginAmount = 50
+	}
+
+	if !no3 {
+		beginAmount += 10
 	}
 
 	// 如果没有欠款了，加20，这个加项放在最后，不会被前面冲突掉
@@ -689,5 +691,33 @@ func GetCanBidMoney(listid int, amount, remain float32) int {
 		Log("000000000000  ", listid)
 		return 0
 	}
+
+
+	personInfo := GetFastPersonInfo(listid)
+	if personInfo == nil {
+		Log("get person info error ", listid)
+		return 0
+	}
+
+	Log("check person info  ", listid)
+
+	for _, item := range personInfo.ResultContent.UserAuthsList {
+		if item.Name == "学历认证" {
+			Log("############# have degree --> add 40  ", listid)
+			beginAmount += 40
+		}
+	}
+
+	if personInfo.ResultContent.BalAmount > 4000 {
+		Log("###########have other debet will going to 0   ", listid)
+		beginAmount = 0
+	} else if personInfo.ResultContent.BalAmount > 1000 {
+		Log("###########have other debet   ", listid)
+		beginAmount = 52
+	}
+	if beginAmount > (int(amount) * 3 / 10) {
+		beginAmount = int(amount) * 3 / 10
+	}
+
 	return beginAmount
 }

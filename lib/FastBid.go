@@ -143,10 +143,10 @@ func (s *FastBid) doCheck(listid int) {
 		fastBaseInfo := GetFastListBaseInfo(listid)
 		if fastBaseInfo == nil || fastBaseInfo.Result == 404 {
 			// 如果是404，可能这个标号确实无效，确实无效可以通过更大的标号都已经存在了来确认，否则等待
-			bigFast := s.getBigFast()
-			if  bigFast > listid {
-				return
-			}
+			//bigFast := s.getBigFast()
+			//if  bigFast > listid {
+			//	return
+			//}
 			nextSleep := 1000 + rand.Intn(1000)
 			time.Sleep(time.Duration(nextSleep) * time.Millisecond)
 			continue
@@ -167,43 +167,23 @@ func (s *FastBid) doCheck(listid int) {
 }
 
 func (s *FastBid) fastBid(listid int, amout float32) {
-	canBidMoney := int32(GetCanBidMoney(listid, amout, amout))
+	canBidMoney := GetCanBidMoney(listid, amout, amout)
 	SetFastInfo(listid, int(canBidMoney))
 	if canBidMoney <= 0 {
 		return
 	}
 
-	go func(money int32) {
-		personInfo := GetFastPersonInfo(listid)
-		for _, item := range personInfo.ResultContent.UserAuthsList {
-			if item.Name == "学历认证" {
-				Log("############# have degree --> add 40  ", listid)
-				money += 40
-			}
-		}
-		if personInfo.ResultContent.BalAmount > 4000 {
-			Log("###########have other debet will going to 0   ", listid)
-			money = 0
-		} else if personInfo.ResultContent.BalAmount > 1000 {
-			Log("###########have other debet   ", listid)
-			money = 50
-		}
-		if float32(money) > (amout * 3 / 10) {
-			money = int32(amout * 3 / 10)
-		}
-		atomic.StoreInt32(&canBidMoney, money)
-		SetFastInfo(listid, int(money))
-	}(canBidMoney)
+	Log("!!!!!!!!!!!!!!   wait fast bid -->  ", listid)
+	Log("!!!!!!!!!!!!!!   wait fast bid -->  ", listid)
+	Log("!!!!!!!!!!!!!!   wait fast bid -->  ", listid)
+	Log("!!!!!!!!!!!!!!   wait fast bid -->  ", listid)
 
-	Log("!!!!!!!!!!!!!!   wait fast bid -->  ", listid)
-	Log("!!!!!!!!!!!!!!   wait fast bid -->  ", listid)
-	Log("!!!!!!!!!!!!!!   wait fast bid -->  ", listid)
-	Log("!!!!!!!!!!!!!!   wait fast bid -->  ", listid)
 	for {
 
 		if alreadyFastBid.Exist(listid) {
 			return
 		}
+
 		go func() {
 			fastBaseInfo := GetFastListBaseInfo(listid)
 			if fastBaseInfo == nil {
@@ -224,21 +204,72 @@ func (s *FastBid) fastBid(listid int, amout float32) {
 
 				Log("+++++++++++look  look fast web status is ok now , wait openapi status  ", listid)
 				Log("+++++++++++look  look fast web status is ok now , wait openapi status  ", listid)
-				Log("+++++++++++look  look fast web status is ok now , wait openapi status  ", listid)
-				lastMoney := int(atomic.LoadInt32(&canBidMoney))
 
-				time.Sleep(2260 * time.Millisecond)
-				Log("!!!!!!!!!!!!!!!!!#### look fast bid now   ", listid)
-				Log("!!!!!!!!!!!!!!!!!#### look fast bid now   ", listid)
-				Log("!!!!!!!!!!!!!!!!!#### look fast bid now   ", listid)
+				lastMoney := canBidMoney
 
-				go BidMoney(listid, lastMoney, user.AccessToken, user.Name, user.UseHongbao)
 
-				time.Sleep(20 * time.Millisecond)
-				go BidMoney(listid, lastMoney, s.users[1].AccessToken, s.users[1].Name, s.users[1].UseHongbao)
+				if lastMoney > 160 {
+					go func() {
+						time.Sleep(1960 * time.Millisecond)
+						Log("************** bid through wait   --------------")
+						Log("************** bid through wait   --------------")
+						go BidMoney(listid, lastMoney, s.users[3].AccessToken, s.users[3].Name, s.users[3].UseHongbao)
+					}()
 
-				time.Sleep(40 * time.Millisecond)
-				go BidMoney(listid, lastMoney, s.users[2].AccessToken, s.users[2].Name, s.users[2].UseHongbao)
+					//go func() {
+					//	time.Sleep(2180 * time.Millisecond)
+					//	Log("************** bid through wait   --------------")
+					//	Log("************** bid through wait   --------------")
+					//	go BidMoney(listid, lastMoney, s.users[0].AccessToken, s.users[0].Name, s.users[0].UseHongbao)
+					//}()
+				}
+
+
+				var aa int32 = 0
+				for {
+
+					flagNow := atomic.LoadInt32(&aa)
+					if flagNow != 0 {
+						break
+					}
+					go func() {
+						nowAaa := atomic.LoadInt32(&aa)
+						if nowAaa == 0 {
+							temp := GetBidStatus(s.useApp.UseAppInfo, []int{listid})
+							if temp != nil && temp.Result == 1 && len(temp.Infos) > 0 {
+								if atomic.CompareAndSwapInt32(&aa, 0, 1) {
+
+									Log("************** bid through fast api   --------------")
+									Log("************** bid through fast api   --------------")
+									go BidMoney(listid, lastMoney, user.AccessToken, user.Name, user.UseHongbao)
+									go BidMoney(listid, lastMoney, s.users[1].AccessToken, s.users[1].Name, s.users[1].UseHongbao)
+									go BidMoney(listid, lastMoney, s.users[2].AccessToken, s.users[2].Name, s.users[2].UseHongbao)
+								}
+							}
+						} else {
+							return
+						}
+					}()
+					time.Sleep(100 * time.Millisecond)
+				}
+
+				//time.Sleep(1980 * time.Millisecond)
+				//Log("!!!!!!!!!!!!!!!!!#### look fast bid now   ", listid)
+				//Log("!!!!!!!!!!!!!!!!!#### look fast bid now   ", listid)
+				//Log("!!!!!!!!!!!!!!!!!#### look fast bid now   ", listid)
+				//
+				//go BidMoney(listid, lastMoney, user.AccessToken, user.Name, user.UseHongbao)
+				//
+				//time.Sleep(260 * time.Millisecond)
+				//go BidMoney(listid, lastMoney, s.users[1].AccessToken, s.users[1].Name, s.users[1].UseHongbao)
+				//
+				//time.Sleep(60 * time.Millisecond)
+				//go BidMoney(listid, lastMoney, s.users[2].AccessToken, s.users[2].Name, s.users[2].UseHongbao)
+				//
+				//if lastMoney > 120 {
+				//	time.Sleep(20 * time.Millisecond)
+				//	go BidMoney(listid, lastMoney, s.users[3].AccessToken, s.users[3].Name, s.users[3].UseHongbao)
+				//}
 
 				time.Sleep(350 * time.Millisecond)
 				s.releaseInBidWait()
