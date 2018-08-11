@@ -86,13 +86,58 @@ type AuthsInfo struct {
 	Name string
 }
 
+type EducationInfo struct {
+	EducationDegree string           // 学历，本科，专科
+	Graduate        string           // 学校
+	StudyStyle      string           // 学习形式，普通，成人
+
+}
+
 type PersonInfo struct {
-	BalAmount float32              // 网贷余额
-	UserAuthsList []AuthsInfo
+	BalAmount        float32              // 网贷余额
+	UserAuthsList    []AuthsInfo
+	EducationInfo    EducationInfo     // 学习形式
+	Gender           string            // 性别
 }
 
 
 type FastPersonInfo struct {
 	Result int      // 0错误，1成功     -1 异常
 	ResultContent PersonInfo
+}
+
+
+// ---------------------------------------------------------
+
+type LoanDetail struct {
+	RemainFunding float32                                  // 剩余可投金额
+	CreditCode string
+	ListingId int
+	Amount float32
+	Months int
+	CurrentRate float32                                    // 利率
+	EducationDegree string
+	StudyStyle string
+	SuccessCount int
+	WasteCount int
+	CancelCount int
+	FailedCount int
+	NormalCount int
+	OverdueLessCount int                                     // 1-15天内的逾期
+	OverdueMoreCount int                                     // 15天以上的逾期
+	OwingPrincipal float32                                   // 剩余待还本金
+	OwingAmount float32                                      // 待还金额
+	AmountToReceive float32                                  // 代收金额
+	FirstSuccessBorrowTime string                            // 第一次成功借款时间
+	CertificateValidate int                                  // 是否有学历认证
+	LastSuccessBorrowTime string                             // 最后一次成功借款时间
+	HighestPrincipal float32                                 // 最高单笔借款金额
+	HighestDebt float32                                      // 最高负债
+	TotalPrincipal float32                                   // 累计借款金额
+
+	DeadLineTimeOrRemindTimeStr string                        // 截止时间   如果正在投标，那么是xx天xx时xx分
+}
+
+type LoanDetailList struct {
+	LoanInfos []LoanDetail
 }

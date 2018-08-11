@@ -10,6 +10,7 @@ import (
 )
 
 import ("crypto/tls"
+	"sync"
 )
 
 var client = &http.Client{Transport: &http.Transport{
@@ -48,35 +49,6 @@ type BidRequestWithHongBao struct {
 	UseCoupon string
 }
 
-type LoanDetail struct {
-	RemainFunding float32
-	CreditCode string
-	ListingId int
-	Amount float32
-	Months int
-	CurrentRate float32
-	EducationDegree string
-	SuccessCount int
-	WasteCount int
-	CancelCount int
-	FailedCount int
-	NormalCount int
-	OverdueLessCount int
-	OverdueMoreCount int
-	OwingPrincipal float32
-	OwingAmount float32
-	AmountToReceive float32
-	FirstSuccessBorrowTime string
-	CertificateValidate int
-	LastSuccessBorrowTime string
-	HighestPrincipal float32
-	HighestDebt float32
-	TotalPrincipal float32
-}
-
-type LoanDetailList struct {
-	LoanInfos []LoanDetail
-}
 
 
 
@@ -85,47 +57,39 @@ func (s *CanBidItem) doBid() {
 		if s.Rate >= 12 {
 			BidMoney(s.ListingId, 200, AccessToken, "fjs", false)
 		}
-	} else {
-		DoCreaditBid(s.ListingId, int(s.Amount), s.Remainfunding)
 	}
-
 }
 
 func (s *CanBidItem) DoBid() {
-	if !proceeIDS.Add(s.ListingId) {
+	if !proceeIDS.Add(s.ListingId, "") {
 		return
 	}
 	go s.doBid()
 }
 
-//func GetIdsThroughWeb() []int {
-//	var out []int
-//	request, _ := http.NewRequest("GET", "https://invest.ppdai.com/loan/listnew?LoanCategoryId=4&CreditCodes=4%2C5%2C&ListTypes=&Rates=&Months=&AuthInfo=1%2C&BorrowCount=&didibid=&SortType=0&MinAmount=0&MaxAmount=0", nil)
-//	request.Header.Set("Connection", "keep-alive")
-//	rep, _ := client.Do(request)
-//	defer rep.Body.Close()
-//	doc, _ := goquery.NewDocumentFromReader(rep.Body)
-//	doc.Find(".title").Each(func(i int,  s *goquery.Selection){
-//		url, exist := s.Attr("href")
-//		if exist {
-//			strs := strings.Split(url, "=")
-//			if len(strs) == 2 {
-//				listid, err := strconv.Atoi(strs[1])
-//				if err == nil {
-//					out = append(out, listid)
-//				}
-//			}
-//		}
-//	})
-//	return out
-//}
+
+var early = -3
+var earlyLock sync.Mutex
+
+func getEarly() int {
+	earlyLock.Lock()
+	defer earlyLock.Unlock()
+	if early < -20 {
+		early = -3
+	} else {
+		early -= 1
+	}
+	return early
+}
 
 
 /**
 * 通过api获取可投的标列表
  */
 func GetCanBidNow(appInfo *PpAppInfo) *CanBidResponse{
-	ss, _ := time.ParseDuration("-15s")
+	useCha := getEarly()
+	haha := strconv.Itoa(useCha) + "s"
+	ss, _ := time.ParseDuration(haha)
 	now := time.Now()
 	now = now.Add(ss)
 	message := BidRequestData{PageIndex: 1, StartDateTime: now.Format("2006-01-02 15:04:05")}
@@ -145,6 +109,7 @@ func GetCanBidNow(appInfo *PpAppInfo) *CanBidResponse{
 	reqest.Header.Set("X-PPD-TIMESTAMP", timeStr)
 	timeSign := appInfo.Signer.SignData(appInfo.Appid + timeStr)
 	reqest.Header.Set("X-PPD-TIMESTAMP-SIGN", timeSign)
+
 
 	response, err := client.Do(reqest)
 	if err != nil{
@@ -185,7 +150,10 @@ func GetBidStatus(appInfo *PpAppInfo, ids []int) *BidStatusList{
 	timeSign := appInfo.Signer.SignData(appInfo.Appid + timeStr)
 	reqest.Header.Set("X-PPD-TIMESTAMP-SIGN", timeSign)
 
-	response, _ := client.Do(reqest)
+	response, err := client.Do(reqest)
+	if err != nil {
+		return nil
+	}
 	defer response.Body.Close()
 
 	body, _ := ioutil.ReadAll(response.Body)
@@ -218,7 +186,10 @@ func GetListDetail(appInfo *PpAppInfo, ids []int) *LoanDetailList{
 	response, _ := client.Do(reqest)
 	defer response.Body.Close()
 
-	body, _ := ioutil.ReadAll(response.Body)
+	body, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		return nil
+	}
 
 	detailList := &LoanDetailList{}
 	json.Unmarshal(body, detailList)
@@ -292,174 +263,6 @@ func BidMoney(listid, money int, accessToken , name string, useHongbao bool) {
 }
 
 
-func DoCreaditBid(listid int, amount int, remain float32) {
-	type infoRequest struct {
-		ListingId string
-		Source int
-	}
-	reqeustMessage := &infoRequest{ListingId:strconv.Itoa(listid), Source:1}
-	bodyBytes, _ := json.Marshal(reqeustMessage)
-	bodyStr := string(bodyBytes)
-	bodyStr = strings.ToLower(bodyStr)
-	reqest, _ := http.NewRequest("POST", "https://invest.ppdai.com/api/invapi/LoanDetailPcService/showBorrowerStatistics", strings.NewReader(bodyStr))
-
-	reqest.Header.Set("Cookie", Cookie)
-	reqest.Header.Set("Connection", "keep-alive")
-	response, _ := client.Do(reqest)
-	defer response.Body.Close()
-
-	body, _ := ioutil.ReadAll(response.Body)
-
-	type liststatic struct {
-		FirstSuccessDate string
-		SuccessNum int
-	}
-
-	type previousListItem struct {
-		Amount float32
-		CreationDate string
-	}
-
-	type lonstatic struct {
-		ListingStatics liststatic
-		Normalnum int                       // 正常还款次数
-		OverdueLessNum int                  // 15天内逾期
-		OverdueMoreNum int                  // 15天以上逾期
-		TotalPrincipal float32              // 总共借款
-		OwingAmount float32                 // 剩余欠款
-		LoanAmountMax float32               // 最高单次借款
-		DebtAmountMax float32               // 最高历史负载
-		OverdueDayMap map[string]float32    // 最近几次还款的逾期天数
-		PreviousListings []previousListItem  // 最近几次借款的信息
-	}
-
-	type staticContent struct {
-		LoanerStatistics lonstatic
-	}
-
-	type staticResponse struct {
-		Result int
-		ResultContent staticContent
-	}
-
-	aa := &staticResponse{}
-
-	json.Unmarshal(body, aa)
-	staticInfo := &aa.ResultContent.LoanerStatistics
-
-
-	//if amount > 15000 {
-	//	Log("no amount , ", amount, listid)
-	//	return
-	//}
-
-	if staticInfo.ListingStatics.SuccessNum < 2 {
-		Log("no success num , ", staticInfo.ListingStatics.SuccessNum, listid)
-		return
-	}
-
-	if staticInfo.OverdueMoreNum > 0 {
-		Log("no overduce more num , ", staticInfo.OverdueMoreNum, listid)
-		return
-	}
-
-	if staticInfo.OverdueLessNum > (staticInfo.Normalnum * 2 / 10) {
-		Log("no overduce less num, ", staticInfo.OverdueLessNum, staticInfo.Normalnum, listid)
-		return
-	}
-
-	if (float32(amount) + staticInfo.OwingAmount) > (staticInfo.DebtAmountMax * 0.4) {
-		Log("no amout + owing ", amount, staticInfo.OwingAmount, staticInfo.DebtAmountMax, listid)
-		return
-	}
-
-	//if staticInfo.OwingAmount > (staticInfo.LoanAmountMax * 0.3) {
-	//	Log("no owing debetamount , ", staticInfo.OwingAmount, staticInfo.LoanAmountMax, listid)
-	//	return
-	//}
-
-	//if staticInfo.Normalnum < (staticInfo.ListingStatics.SuccessNum * 3) {
-	//	Log("no normal num , succs num ", staticInfo.Normalnum, staticInfo.ListingStatics.SuccessNum, listid)
-	//	return
-	//}
-
-	//if len(staticInfo.PreviousListings) == 0 {
-	//	Log("nono previous list ,,, ", listid)
-	//	return
-	//}
-
-	//nearest := staticInfo.PreviousListings[0].CreationDate
-	//t, _ := time.Parse("2006-01-02 15:04:05", nearest)
-	//now := time.Now()
-	//sub := now.Sub(t)
-	//cha := sub.Hours() / 24
-	//if cha <= 20 || cha >= 300 {
-	//	Log("no111111111    ", cha, listid)
-	//	return
-	//}
-	//
-	//if len(staticInfo.OverdueDayMap) == 0 {
-	//	return
-	//}
-	//no3 := false
-	//for _, day := range staticInfo.OverdueDayMap {
-	//	if day > 0 {
-	//		Log("no222222        ", listid, day)
-	//		return
-	//	} else if day < -5 {
-	//		Log("no3333333   ", listid, day)
-	//		no3 = true
-	//		return
-	//	}
-	//}q
-
-	//Log(listid, staticInfo.ListingStatics.SuccessNum, staticInfo.ListingStatics.FirstSuccessDate, staticInfo.Normalnum, staticInfo.OverdueLessNum, staticInfo.OverdueMoreNum)
-	//Log(staticInfo.TotalPrincipal, staticInfo.OwingAmount, staticInfo.LoanAmountMax, staticInfo.DebtAmountMax)
-	//Log(staticInfo.OverdueDayMap)
-	//Log(staticInfo.PreviousListings)
-
-	beginAmount := 166
-
-	//if staticInfo.Normalnum > 10 {
-	//	beginAmount += 50
-	//}
-	//
-	//if staticInfo.ListingStatics.SuccessNum > 3 {
-	//	beginAmount += 60
-	//} else if staticInfo.ListingStatics.SuccessNum > 2 {
-	//	beginAmount += 30
-	//}
-	//
-	//if staticInfo.Normalnum >= staticInfo.ListingStatics.SuccessNum * 6 {
-	//	beginAmount += 100
-	//}
-	//
-	//if staticInfo.OwingAmount > 0 {
-	//	beginAmount /= 2
-	//	if beginAmount > 100 {
-	//		beginAmount = 100
-	//	}
-	//} else if staticInfo.OwingAmount == 0 {
-	//	beginAmount += 50
-	//}
-	//
-	//if beginAmount > 500 {
-	//	beginAmount = 500
-	//} else if beginAmount < 50 {
-	//	beginAmount = 50
-	//}
-	//
-	//if beginAmount > amount * 3 / 10 {
-	//	beginAmount = amount * 3 / 10
-	//}
-
-	if beginAmount > int(remain) {
-		beginAmount = int(remain)
-	}
-
-	BidMoney(listid, beginAmount, AccessToken, "fjs", false)
-}
-
 
 /**
 根据listid获取基本信息，包括利率，金额等
@@ -516,32 +319,83 @@ func GetFastPersonInfo(listid int) *FastPersonInfo {
 }
 
 
+
 /**
 从web上拿数据bid，并就算能投多少钱
  */
-func GetCanBidMoney(listid int, amount, remain float32) int {
-	reqeustMessage := &InfoRequest{ListingId:strconv.Itoa(listid), Source:1}
-	bodyBytes, _ := json.Marshal(reqeustMessage)
-	bodyStr := string(bodyBytes)
-	bodyStr = strings.ToLower(bodyStr)
-	reqest, _ := http.NewRequest("POST", "https://invest.ppdai.com/api/invapi/LoanDetailPcService/showBorrowerStatistics", strings.NewReader(bodyStr))
+func GetCanBidMoney(listid int, amount, remain float32) (bool, int) {
 
-	reqest.Header.Set("Cookie", Cookie)
-	reqest.Header.Set("Connection", "keep-alive")
-	response, err := client.Do(reqest)
-	if err != nil {
-		Log("http errror when get detail through web     ", err)
-		return 0
+
+	personInfoChan := make(chan *FastPersonInfo)
+	staticReponseChan := make(chan *StaticResponse)
+
+
+	// 获取用户信息
+	go func() {
+		personInfo := GetFastPersonInfo(listid)
+		personInfoChan <- personInfo
+	}()
+
+
+	go func() {
+		reqeustMessage := &InfoRequest{ListingId:strconv.Itoa(listid), Source:1}
+		bodyBytes, _ := json.Marshal(reqeustMessage)
+		bodyStr := string(bodyBytes)
+		bodyStr = strings.ToLower(bodyStr)
+		reqest, _ := http.NewRequest("POST", "https://invest.ppdai.com/api/invapi/LoanDetailPcService/showBorrowerStatistics", strings.NewReader(bodyStr))
+
+		reqest.Header.Set("Cookie", Cookie)
+		reqest.Header.Set("Connection", "keep-alive")
+		response, err := client.Do(reqest)
+		if err != nil {
+			Log("http errror when get detail through web     ", err)
+			staticReponseChan <- nil
+			return
+		}
+		defer response.Body.Close()
+
+		body, _ := ioutil.ReadAll(response.Body)
+
+
+		aa := &StaticResponse{}
+
+		json.Unmarshal(body, aa)
+		staticReponseChan <- aa
+
+	}()
+
+	aa := <- staticReponseChan
+	if aa == nil {
+		return false, 0
 	}
-	defer response.Body.Close()
-
-	body, _ := ioutil.ReadAll(response.Body)
-
-
-	aa := &StaticResponse{}
-
-	json.Unmarshal(body, aa)
 	staticInfo := &aa.ResultContent.LoanerStatistics
+
+	personInfo := <- personInfoChan
+	if personInfo == nil {
+		Log("get person info error ", listid)
+		return false, 0
+	}
+
+
+
+	// 检测是否有学历
+	hasEducation := false
+	for _, item := range personInfo.ResultContent.UserAuthsList {
+		if item.Name == "学历认证" {
+			hasEducation = true
+		}
+	}
+
+	isNormalEducation := false
+	if hasEducation && personInfo.ResultContent.EducationInfo.StudyStyle == "普通" {
+		isNormalEducation = true
+	}
+
+	isNormalBachelor := false
+	if isNormalEducation && personInfo.ResultContent.EducationInfo.EducationDegree == "本科" {
+		isNormalBachelor = true
+	}
+
 
 
 	//if !proceeIDS.AddBid(listid) {
@@ -551,7 +405,7 @@ func GetCanBidMoney(listid int, amount, remain float32) int {
 
 	if len(staticInfo.PreviousListings) == 0 {
 		Log("nono previous list ,,, ", listid)
-		return 0
+		return false, 0
 	}
 	nearest := staticInfo.PreviousListings[0].CreationDate
 	t, _ := time.Parse("2006-01-02 15:04:05", nearest)
@@ -559,51 +413,70 @@ func GetCanBidMoney(listid int, amount, remain float32) int {
 	sub := now.Sub(t)
 	lastCha := sub.Hours() / 24
 
-	// 上次借款45天以内的，不投
+	// 上次借款45天以内的，不投，学历可以放宽到30天
 	if lastCha < 45 {
-		Log("no last cha,  ", lastCha, listid)
-		return 0
+		if hasEducation && lastCha > 30 {
+			Log(" education last cha  okok ", lastCha, listid)
+		} else {
+			Log("no last cha,  ", lastCha, listid)
+			return false, 0
+		}
 	}
-	// 成功借款次数小于2次的，不投
+	// 成功借款次数小于2次的，不投，学历放宽到1次
 	if staticInfo.ListingStatics.SuccessNum < 2 {
-		Log("no success num  ", staticInfo.ListingStatics.SuccessNum, listid)
-		return 0
+		if hasEducation && staticInfo.ListingStatics.SuccessNum > 1 {
+			Log(" education success num okok , ", staticInfo.ListingStatics.SuccessNum, listid)
+		} else {
+			Log("no success num  ", staticInfo.ListingStatics.SuccessNum, listid)
+			return false, 0
+		}
 	}
 
 	// 有15天以上逾期的不投
 	if staticInfo.OverdueMoreNum > 0 {
 		Log("no overduce more num,  ", staticInfo.OverdueMoreNum, listid)
-		return 0
+		return false, 0
 	}
 
 	// 还款次数小于正常借款次数的3倍不投
 	if (staticInfo.Normalnum + staticInfo.OverdueLessNum) < staticInfo.ListingStatics.SuccessNum * 3 {
 		Log("no normal + overduce ," , staticInfo.Normalnum, staticInfo.OverdueLessNum, staticInfo.ListingStatics.SuccessNum, listid)
-		return 0
+		return false, 0
 	}
 
 	// 每15次正常还款才能有2次15天内逾期
 	if staticInfo.OverdueLessNum > (staticInfo.Normalnum * 2 / 15) {
 		Log("no overduce less num,  ", staticInfo.OverdueLessNum, staticInfo.Normalnum, listid)
-		return 0
+		return false, 0
 	}
 
-	// 本次金额加上待还不能超过最高负负债的0.7倍
-	if (amount + staticInfo.OwingAmount) > (staticInfo.DebtAmountMax * 0.7) {
-		Log("no amount + owing  ", amount, staticInfo.OwingAmount, staticInfo.DebtAmountMax, listid)
-		return 0
+	// 本次金额加上待还不能超过最高负负债的0.7倍,普通本科可以放宽到0.9
+	if staticInfo.OwingAmount > 0 {
+		if (amount + staticInfo.OwingAmount) > (staticInfo.DebtAmountMax * 0.7) {
+			if isNormalBachelor && (amount+staticInfo.OwingAmount) < (staticInfo.DebtAmountMax*0.9) {
+				Log("普通本科  okok  ", listid)
+			} else {
+				Log("no amount + owing  ", amount, staticInfo.OwingAmount, staticInfo.DebtAmountMax, listid)
+				return false, 0
+			}
+		}
+	} else if amount > staticInfo.LoanAmountMax {
+		Log("no amout, lonanmax  ", amount, staticInfo.LoanAmountMax, listid)
+		return false, 0
 	}
+
+
 
 	// 本次借款加上待还不能超过最大单单次借款金额的1.2倍，该条件可以在标很少的时候适当放宽
 	if (amount + staticInfo.OwingAmount) > (staticInfo.LoanAmountMax * 1.2) {
 		Log("no amout + owing, amount max  ", amount, staticInfo.OwingAmount, staticInfo.LoanAmountMax, listid)
-		return 0
+		return false, 0
 	}
 
 	// 待还不能超过最大借款本金的0.5倍，该条件可以在标少的时候移除
 	if staticInfo.OwingAmount > (staticInfo.LoanAmountMax * 0.5) {
 		Log("no owing, loanmax,  ", staticInfo.OwingAmount, staticInfo.LoanAmountMax, listid)
-		return 0
+		return false, 0
 	}
 
 	// 未结清借款超过1个的不投    这个可以调整
@@ -614,7 +487,7 @@ func GetCanBidMoney(listid int, amount, remain float32) int {
 			// 如果有未还完的随借随还，不投
 			if strings.Compare(item.Title, "随借随还") == 0 {
 				Log("随借随还，nonon  ", listid)
-				return 0
+				return false, 0
 			}
 		}
 	}
@@ -642,9 +515,9 @@ func GetCanBidMoney(listid int, amount, remain float32) int {
 		beginAmount += 10
 	}
 
-	// 如果本次借款加上待还小于最大单次借款本金，加20
+	// 如果本次借款加上待还小于最大单次借款本金，加10
 	if (amount + staticInfo.OwingAmount) < staticInfo.LoanAmountMax {
-		beginAmount += 20
+		beginAmount += 10
 	}
 
 	// 最多一次流标，加10
@@ -658,7 +531,7 @@ func GetCanBidMoney(listid int, amount, remain float32) int {
 	for _, day := range staticInfo.OverdueDayMap {
 		if day > 0 {
 			Log("no222222        ", listid, day)
-			return 0
+			return false, 0
 		} else if day < -5 {
 			Log("no3333333   ", listid, day)
 			no3 = true
@@ -689,22 +562,21 @@ func GetCanBidMoney(listid int, amount, remain float32) int {
 
 	if beginAmount <= 0 {
 		Log("000000000000  ", listid)
-		return 0
+		return false, 0
 	}
 
 
-	personInfo := GetFastPersonInfo(listid)
-	if personInfo == nil {
-		Log("get person info error ", listid)
-		return 0
-	}
+
 
 	Log("check person info  ", listid)
 
-	for _, item := range personInfo.ResultContent.UserAuthsList {
-		if item.Name == "学历认证" {
-			Log("############# have degree --> add 40  ", listid)
+	// 有学历，普通本科加40，其他加20
+	if hasEducation {
+		if isNormalBachelor {
+			Log("普通本科 add 40  ", listid)
 			beginAmount += 40
+		} else {
+			beginAmount += 20
 		}
 	}
 
@@ -719,5 +591,176 @@ func GetCanBidMoney(listid int, amount, remain float32) int {
 		beginAmount = int(amount) * 3 / 10
 	}
 
-	return beginAmount
+	return hasEducation, beginAmount
+}
+
+
+func GetCanBidMoneyThroughApiDetail(detail *LoanDetail) (bool, int) {
+
+	// 检测是否有学历
+	hasEducation := false
+	if detail.CertificateValidate == 1 {
+		hasEducation = true
+	}
+
+	isNormalEducation := false
+	if hasEducation && detail.StudyStyle == "普通" {
+		isNormalEducation = true
+	}
+
+	isNormalBachelor := false
+	if isNormalEducation && detail.EducationDegree == "本科" {
+		isNormalBachelor = true
+	}
+
+	lastSuccess, _ := time.Parse("2006-01-02T15:04:05", detail.LastSuccessBorrowTime)
+	lastCha := time.Now().Sub(lastSuccess).Hours() / 24
+
+
+	if detail.Amount > 10000 {
+		Log("no amount ", detail.Amount, detail.ListingId)
+		return false, 0
+	}
+
+	// 上次借款45天以内的，不投，学历可以放宽到30天
+	if lastCha < 45 {
+		if hasEducation && lastCha > 30 {
+			Log(" education last cha  okok ", lastCha, detail.ListingId)
+		} else {
+			Log("no last cha,  ", lastCha, detail.ListingId)
+			return false, 0
+		}
+	}
+	// 成功借款次数小于2次的，不投，普通学历放宽到1次
+	if detail.SuccessCount < 2 {
+		if isNormalEducation && detail.SuccessCount > 1 {
+			Log(" education success num okok , ", detail.SuccessCount, detail.ListingId)
+		} else {
+			Log("no success num  ", detail.SuccessCount, detail.ListingId)
+			return false, 0
+		}
+	}
+
+	// 有15天以上逾期的不投
+	if detail.OverdueMoreCount > 0 {
+		Log("no overduce more num,  ", detail.OverdueMoreCount, detail.ListingId)
+		return false, 0
+	}
+
+	// 还款次数小于正常借款次数的3倍不投
+	if (detail.NormalCount + detail.OverdueLessCount) < detail.SuccessCount * 3 {
+		Log("no normal + overduce ," , detail.NormalCount, detail.OverdueLessCount, detail.SuccessCount, detail.ListingId)
+		return false, 0
+	}
+
+	// 每15次正常还款才能有1次15天内逾期
+	if detail.OverdueLessCount > (detail.NormalCount * 1 / 15) {
+		Log("no overduce less num,  ", detail.OverdueLessCount, detail.NormalCount, detail.ListingId)
+		return false, 0
+	}
+
+	// 本次金额加上待还不能超过最高负负债的0.7倍,普通本科可以放宽到0.9
+	if detail.OwingAmount > 0 {
+		if (detail.Amount + detail.OwingAmount) > (detail.HighestDebt * 0.7) {
+			if isNormalBachelor && (detail.Amount + detail.OwingAmount) < (detail.HighestDebt * 0.9) {
+				Log("普通本科  okok  ", detail.ListingId)
+			} else {
+				Log("no amount + owing  ", detail.Amount, detail.OwingAmount, detail.HighestDebt, detail.ListingId)
+				return false, 0
+			}
+		}
+	} else if detail.Amount > detail.HighestPrincipal {
+		Log("no amout, lonanmax  ", detail.Amount, detail.HighestPrincipal, detail.ListingId)
+		return false, 0
+	}
+
+
+
+	// 本次借款加上待还不能超过最大单单次借款金额的1.2倍，该条件可以在标很少的时候适当放宽
+	if (detail.Amount + detail.OwingAmount) > (detail.HighestPrincipal * 1.2) {
+		Log("no amout + owing, amount max  ", detail.Amount, detail.OwingAmount, detail.HighestPrincipal, detail.ListingId)
+		return false, 0
+	}
+
+	// 待还不能超过最大借款本金的0.5倍，该条件可以在标少的时候移除
+	if detail.OwingAmount > (detail.HighestPrincipal * 0.5) {
+		Log("no owing, loanmax,  ", detail.OwingAmount, detail.HighestPrincipal, detail.ListingId)
+		return false, 0
+	}
+
+
+
+	beginAmount := 50        // 初始金额50
+
+	// 如果0逾期，加10
+	if detail.OverdueLessCount == 0 {
+		beginAmount += 10
+	}
+
+	// 正常还款次数大于成功借款次数5倍，+10
+	if detail.NormalCount >= detail.SuccessCount * 5 {
+		beginAmount += 10
+	}
+
+	// 上次借款在90天之前加40，在60天之前加20
+	if lastCha > 90 {
+		beginAmount += 20
+	} else if lastCha > 60 {
+		beginAmount += 10
+	}
+
+	// 如果本次借款加上待还小于最大单次借款本金，加10
+	if (detail.Amount + detail.OwingAmount) < detail.HighestPrincipal {
+		beginAmount += 10
+	}
+
+	// 最多一次流标，加10
+	if detail.WasteCount <= 1 {
+		beginAmount += 10
+	}
+
+	// 凡是还有债务的借款，最多投80
+	if detail.OwingAmount > 0 {
+		beginAmount = 50
+	}
+
+
+	// 如果没有欠款了，加20，这个加项放在最后，不会被前面冲突掉
+	if detail.OwingAmount == 0 {
+		beginAmount += 20
+	}
+
+
+	if beginAmount > int(detail.RemainFunding) {
+		beginAmount = int(detail.RemainFunding)
+	}
+	beginAmount += 2
+
+	if beginAmount <= 0 {
+		Log("000000000000  ", detail.ListingId)
+		return false, 0
+	}
+
+
+
+
+	Log("check person info  ", detail.ListingId)
+
+	// 有学历，普通本科加40，其他加20
+	if hasEducation {
+		if isNormalBachelor {
+			Log("普通本科 add 40  ", detail.ListingId)
+			beginAmount += 40
+		} else {
+			beginAmount += 20
+		}
+	}
+
+	if beginAmount > (int(detail.Amount) * 3 / 10) {
+		beginAmount = int(detail.Amount) * 3 / 10
+	}
+
+	return hasEducation, beginAmount
+
+
 }

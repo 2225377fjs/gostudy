@@ -3,7 +3,7 @@ package lib
 import (
 	"time"
 	"strings"
-	"math/rand"
+	"sync/atomic"
 )
 
 var proceeIDS = NewSet()
@@ -59,149 +59,80 @@ func (s *App) AddUser(user User) {
 }
 
 
+func (s *App) doApiDetailBid(listIds []int) {
+	loanDetailList := GetListDetail(s.UseAppInfo, listIds)
+	if loanDetailList == nil {
+		Log("&&&&&&&&&&&& get list detail error  ", listIds)
+		Log("&&&&&&&&&&&& get list detail error  ", listIds)
+		return
+	}
+	for _, item := range loanDetailList.LoanInfos {
+		hasEducation, bidMoney := GetCanBidMoneyThroughApiDetail(&item)
+		if bidMoney > 0 {
+			if !hasEducation {
+				Log("no education  -- normal api ", item.ListingId)
+			} else {
+				Log("-- - normal api-----------look look bid  ", bidMoney, item.ListingId)
+				Log("-- - normal api-----------look look bid  ", bidMoney, item.ListingId)
+				Log("-- - normal api-----------look look bid  ", bidMoney, item.ListingId)
+				go BidMoney(item.ListingId, bidMoney, s.users[0].AccessToken, s.users[0].Name, s.users[0].UseHongbao)
+				go BidMoney(item.ListingId, bidMoney, s.users[3].AccessToken, s.users[3].Name, s.users[3].UseHongbao)
+			}
+		}
+
+	}
+}
+
 func (s *App) doBid(appInfo *PpAppInfo) {
 	canBidResponse := GetCanBidNow(appInfo)
 	if canBidResponse == nil {
 		return
 	}
-	canUseListID := []int{}
+	if canBidResponse.Result != 1 {
+		Log(canBidResponse)
+		return
+	}
+	var canUseListID []int
 	nowBig := 0
 	for _, item := range canBidResponse.LoanInfos {
-		if proceeIDS.Add(item.ListingId) {
-
+		if proceeIDS.Add(item.ListingId, "") {
+			AddNearId(item.ListingId)
 			if strings.Compare(item.CreditCode, "AA") != 0 {
 				if item.ListingId > nowBig {
 					nowBig = item.ListingId
 				}
 
 				if item.Rate < 19 {
-					Log("no rate  ", item.Rate)
+					Log("no rate  ", item.Rate, item.ListingId)
 					continue
 				}
-				go s.doWeb(item.ListingId, item.Amount, item.Remainfunding)
+				//go s.doWeb(item.ListingId, item.Amount, item.Remainfunding)
 
-
-				//canUseListID = append(canUseListID, item.ListingId)
-				//if len(canUseListID) >= 10 {
-				//	break
-				//}
-			}
-		}
-	}
-	SetGetBig(nowBig)
-	return
-	// 暂时不走 api获取详情
-	if len(canUseListID) > 0 {
-		loanDetailList := GetListDetail(appInfo, canUseListID)
-		for _, item := range loanDetailList.LoanInfos {
-			if !proceeIDS.AddBid(item.ListingId) {
-				continue
-			}
-
-			Log("wee use api bid  !!!!!!!!!!!!!  ", item.ListingId)
-			lastSuccess, _ := time.Parse("2006-01-02T15:04:05", item.LastSuccessBorrowTime)
-			lastCha := time.Now().Sub(lastSuccess).Hours() / 24
-
-
-			// 上次借款30天以内的，不投
-			if lastCha < 30 {
-				Log("no last cha,  ", lastCha, item.ListingId)
-				continue
-			}
-			// 成功借款次数小于2次的，不投
-			if item.SuccessCount < 2 {
-				Log("no success num  ", item.SuccessCount, item.ListingId)
-				continue
-			}
-
-			// 有15天以上逾期的不投
-			if item.OverdueMoreCount > 0 {
-				Log("no overduce more num,  ", item.OverdueMoreCount, item.ListingId)
-				continue
-			}
-
-			// 还款次数小于正常借款次数的3倍不投
-			if (item.NormalCount + item.OverdueLessCount) < item.SuccessCount * 3 {
-				Log("no normal + overduce ," , item.NormalCount, item.OverdueLessCount, item.SuccessCount)
-				continue
-			}
-
-			// 每10次正常还款才能有2次15天内逾期
-			if item.OverdueLessCount > (item.NormalCount * 2 / 10) {
-				Log("no overduce less num,  ", item.OverdueLessCount, item.NormalCount, item.ListingId)
-				continue
-			}
-
-			// 本次金额加上待还不能超过最高负负债的0.7倍
-			if (item.Amount + item.OwingAmount) > (item.HighestDebt * 0.7) {
-				Log("no amount + owing  ", item.Amount, item.OwingAmount, item.HighestDebt, item.ListingId)
-				continue
-			}
-
-			beginAmount := 50        // 初始金额50
-
-			// 如果0逾期，加20
-			if item.OverdueLessCount == 0 {
-				beginAmount += 20
-			}
-
-			// 正常还款次数大于成功借款次数5倍，加20，大于4倍加10，或者正常还款次数大于15，加10
-			if item.NormalCount >= item.SuccessCount * 5 {
-				beginAmount += 20
-			} else if item.NormalCount >= item.SuccessCount * 4 {
-				beginAmount += 10
-			} else if item.NormalCount > 15 {
-				beginAmount += 10
-			}
-
-			// 上次借款在90天之前加40，在60天之前加20
-			if lastCha > 90 {
-				beginAmount += 40
-			} else if lastCha > 60 {
-				beginAmount += 20
-			}
-
-			// 如果本次借款加上待还小于最大单次借款本金，加60
-			if (item.Amount + item.OwingAmount) < item.HighestPrincipal {
-				beginAmount += 40
-			}
-
-			// 如果没有欠款了，加10
-			if item.OwingAmount == 0 {
-				beginAmount += 10
-			}
-
-			// 有学历认证，加20
-			if item.CertificateValidate == 1 {
-				beginAmount += 20
-			}
-
-			// 凡是还有债务的借款，最多投60
-			if item.OwingAmount > 0 {
-				if beginAmount > 60 {
-					beginAmount = 60
+				if OverIdMap.BidExist(item.ListingId) {
+					Log("----already bid through fast api  ", item.ListingId)
+				} else {
+					if OverIdMap.Exist(item.ListingId) {
+						Log("+++++++++Fast not process because -> ", OverIdMap.GetReason(item.ListingId), "  ", item.ListingId)
+					}
+					Log("++++++++++++++ will bid through normal  ", item.ListingId)
+					canUseListID = append(canUseListID, item.ListingId)
+					if len(canUseListID) >= 10 {
+						go s.doApiDetailBid(canUseListID)
+						canUseListID = []int{}
+					}
 				}
+
 			}
-
-			if beginAmount > int(item.RemainFunding) {
-				beginAmount = int(item.RemainFunding)
-			}
-
-			if beginAmount <= 0 {
-				Log("000000000000  ", item.ListingId)
-				continue
-			}
-
-			go BidMoney(item.ListingId, beginAmount, s.users[0].AccessToken, s.users[0].Name, s.users[0].UseHongbao)
-			go BidMoney(item.ListingId, beginAmount, s.users[1].AccessToken, s.users[1].Name, s.users[1].UseHongbao)
-			go BidMoney(item.ListingId, beginAmount, s.users[2].AccessToken, s.users[2].Name, s.users[2].UseHongbao)
-
-			if beginAmount > 160 {
-				go BidMoney(item.ListingId, beginAmount, s.users[3].AccessToken, s.users[3].Name, s.users[3].UseHongbao)
-			}
-
 		}
 	}
+	if nowBig > 0 {
+		SetBigExistId(nowBig)
+		RefastCheck(nowBig)
+	}
+	if len(canUseListID) > 0 {
+		go s.doApiDetailBid(canUseListID)
+	}
+
 }
 
 
@@ -218,36 +149,35 @@ func (s *App) doWeb(listid int, amount, remain float32 ) {
 		Log("########## bid through fast info   ", listid)
 
 
-		go BidMoney(listid, money, s.users[0].AccessToken, s.users[0].Name, s.users[0].UseHongbao)
-		go BidMoney(listid, money, s.users[1].AccessToken, s.users[1].Name, s.users[1].UseHongbao)
-		go BidMoney(listid, money, s.users[2].AccessToken, s.users[2].Name, s.users[2].UseHongbao)
 
-		if money > 160 {
+		if money > 150 {
+			go BidMoney(listid, money, s.users[0].AccessToken, s.users[0].Name, s.users[0].UseHongbao)
 			go BidMoney(listid, money, s.users[3].AccessToken, s.users[3].Name, s.users[3].UseHongbao)
 		}
 
 		return
-	} else {
-		Log("********* no fast info ", listid)
 	}
 
 	begin := time.Now()
 
-	beginAmount := GetCanBidMoney(listid, amount, remain)
+	haseEduction, beginAmount := GetCanBidMoney(listid, amount, remain)
 	if beginAmount <= 0 {
 		return
 	}
 
 	afterInfo := time.Now()
 
-	Log("bid process info #####  ,", listid, begin, afterInfo)
-	go BidMoney(listid, beginAmount, s.users[0].AccessToken, s.users[0].Name, s.users[0].UseHongbao)
-	go BidMoney(listid, beginAmount, s.users[1].AccessToken, s.users[1].Name, s.users[1].UseHongbao)
-	go BidMoney(listid, beginAmount, s.users[2].AccessToken, s.users[2].Name, s.users[2].UseHongbao)
 
-	if beginAmount > 160 {
-		go BidMoney(listid, beginAmount, s.users[3].AccessToken, s.users[3].Name, s.users[3].UseHongbao)
+	if proceeIDS.AddBid(listid) {
+		Log("---- do web bid process info #####  ,", listid, begin, afterInfo)
+		if haseEduction {
+			go BidMoney(listid, beginAmount, s.users[0].AccessToken, s.users[0].Name, s.users[0].UseHongbao)
+			go BidMoney(listid, beginAmount, s.users[3].AccessToken, s.users[3].Name, s.users[3].UseHongbao)
+		} else {
+			Log("web no education -- ", listid)
+		}
 	}
+
 
 }
 
@@ -264,8 +194,19 @@ func (s *App) Do(){
 		//s.doWeb(121711257, 100, 300)
 		//time.Sleep(10000 * time.Second)
 
-		go s.doBid(s.UseAppInfo)
-		time.Sleep(time.Duration(s.interval + int64(rand.Intn(10))) * time.Millisecond)
+		// 如果在fast的等待途中，那么降低扫标频率
+		if atomic.LoadInt32(&inFastNum) != 0 {
+			time.Sleep(200 * time.Millisecond)
+		}
+		before := time.Now().UnixNano()
+		s.doBid(s.UseAppInfo)
+		use := (time.Now().UnixNano() - before) / 1000000
+		if use < s.interval {
+			time.Sleep(time.Duration(s.interval - use) * time.Millisecond)
+		}
+
+		//go s.doBid(s.UseAppInfo)
+		//time.Sleep(time.Duration(s.interval + int64(rand.Intn(10))) * time.Millisecond)
 
 		//go func(appInfo *PpAppInfo) {
 		//	s.doBid(appInfo)
