@@ -3,7 +3,6 @@ package lib
 import (
 	"time"
 	"strings"
-	"sync/atomic"
 )
 
 var proceeIDS = NewSet()
@@ -60,7 +59,10 @@ func (s *App) AddUser(user User) {
 
 
 func (s *App) doApiDetailBid(listIds []int) {
+	before := time.Now().UnixNano()
 	loanDetailList := GetListDetail(s.UseAppInfo, listIds)
+	Log("@@@@@@@@@@@@@@@ normal list use--> ", (time.Now().UnixNano() - before) / 1000000)
+	Log("@@@@@@@@@@@@@@@ normal list use--> ", (time.Now().UnixNano() - before) / 1000000)
 	if loanDetailList == nil {
 		Log("&&&&&&&&&&&& get list detail error  ", listIds)
 		Log("&&&&&&&&&&&& get list detail error  ", listIds)
@@ -102,7 +104,7 @@ func (s *App) doBid(appInfo *PpAppInfo) {
 					nowBig = item.ListingId
 				}
 
-				if item.Rate < 19 {
+				if item.Rate < 18 {
 					Log("no rate  ", item.Rate, item.ListingId)
 					continue
 				}
@@ -127,7 +129,7 @@ func (s *App) doBid(appInfo *PpAppInfo) {
 	}
 	if nowBig > 0 {
 		SetBigExistId(nowBig)
-		RefastCheck(nowBig)
+		go RefastCheck(nowBig)
 	}
 	if len(canUseListID) > 0 {
 		go s.doApiDetailBid(canUseListID)
@@ -135,51 +137,6 @@ func (s *App) doBid(appInfo *PpAppInfo) {
 
 }
 
-
-/**
-* 先看看有没有之前fast测试的缓存数据，如果有的话就不用重新获取了，直接bid即可
-* 没有的话再去获取可以bid的金额
- */
-func (s *App) doWeb(listid int, amount, remain float32 ) {
-	if money, exist := GetFastInfo(listid); exist {
-		if money <= 0 {
-			Log("-------  not bid beacuse fast bid info  ", listid, money)
-			return
-		}
-		Log("########## bid through fast info   ", listid)
-
-
-
-		if money > 150 {
-			go BidMoney(listid, money, s.users[0].AccessToken, s.users[0].Name, s.users[0].UseHongbao)
-			go BidMoney(listid, money, s.users[3].AccessToken, s.users[3].Name, s.users[3].UseHongbao)
-		}
-
-		return
-	}
-
-	begin := time.Now()
-
-	haseEduction, beginAmount := GetCanBidMoney(listid, amount, remain)
-	if beginAmount <= 0 {
-		return
-	}
-
-	afterInfo := time.Now()
-
-
-	if proceeIDS.AddBid(listid) {
-		Log("---- do web bid process info #####  ,", listid, begin, afterInfo)
-		if haseEduction {
-			go BidMoney(listid, beginAmount, s.users[0].AccessToken, s.users[0].Name, s.users[0].UseHongbao)
-			go BidMoney(listid, beginAmount, s.users[3].AccessToken, s.users[3].Name, s.users[3].UseHongbao)
-		} else {
-			Log("web no education -- ", listid)
-		}
-	}
-
-
-}
 
 func (s *App) DoTest(listid, amout int) {
 	for _, user := range s.users {
@@ -195,7 +152,7 @@ func (s *App) Do(){
 		//time.Sleep(10000 * time.Second)
 
 		// 如果在fast的等待途中，那么降低扫标频率
-		if atomic.LoadInt32(&inFastNum) != 0 {
+		if checkInFastWait() {
 			time.Sleep(200 * time.Millisecond)
 		}
 		before := time.Now().UnixNano()

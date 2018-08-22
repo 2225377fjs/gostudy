@@ -33,12 +33,9 @@ func main() {
 	lib.SetFastUser(aa)
 
 
-
 	var tList []AppInfo
 	tData, _ := ioutil.ReadFile("info.json")
 	json.Unmarshal(tData, &tList)
-
-
 
 
 

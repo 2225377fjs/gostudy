@@ -183,16 +183,22 @@ func GetListDetail(appInfo *PpAppInfo, ids []int) *LoanDetailList{
 	timeSign := appInfo.Signer.SignData(appInfo.Appid + timeStr)
 	reqest.Header.Set("X-PPD-TIMESTAMP-SIGN", timeSign)
 
-	response, _ := client.Do(reqest)
+	response, err := client.Do(reqest)
+	if err != nil {
+		return nil
+	}
 	defer response.Body.Close()
 
-	body, err := ioutil.ReadAll(response.Body)
-	if err != nil {
+	body, err1 := ioutil.ReadAll(response.Body)
+	if err1 != nil {
 		return nil
 	}
 
 	detailList := &LoanDetailList{}
 	json.Unmarshal(body, detailList)
+	if detailList.Result != 1 {
+		Log("get detail list error ->  ", string(body[:]))
+	}
 	return detailList
 }
 
@@ -236,7 +242,11 @@ func BidMoney(listid, money int, accessToken , name string, useHongbao bool) {
 	reqest.Header.Set("X-PPD-TIMESTAMP-SIGN", timeSign)
 	reqest.Header.Set("X-PPD-ACCESSTOKEN", accessToken)
 
-	response, _ := client.Do(reqest)
+	response, httpErr := client.Do(reqest)
+	if httpErr != nil {
+		Log("bid http error  ", httpErr)
+		return
+	}
 	defer response.Body.Close()
 
 	body, err := ioutil.ReadAll(response.Body)
@@ -258,6 +268,132 @@ func BidMoney(listid, money int, accessToken , name string, useHongbao bool) {
 		Log("bid ok ", bidRes.ParticipationAmount,  "  ", listid, "   user: ", name, "  ", string(body))
 	} else {
 		Log("bid fail, ", string(body))
+	}
+
+}
+
+
+func QueryOrder(orderId, listId, accessToken string) *QueryResponse{
+	signedData := SingData1("listingId" + listId + "orderId" + orderId)
+
+
+	message := make(map[string]string)
+	message["orderId"] = orderId
+	message["listingId"] = listId
+	bodyData, _ := json.Marshal(message)
+	bodyStr := string(bodyData)
+
+
+	timeStr := time.Now().UTC().Format("2006-01-02 15:04:05")
+	reqest, _ := http.NewRequest("POST", "https://openapi.ppdai.com/listingbid/openapi/queryBid", strings.NewReader(bodyStr))
+	reqest.Header.Set("Content-Type", "application/json;charset=utf-8")
+	reqest.Header.Set("Connection", "keep-alive")
+	reqest.Header.Set("X-PPD-APPID", AppId1)
+	reqest.Header.Set("X-PPD-SIGN", signedData)
+	reqest.Header.Set("X-PPD-TIMESTAMP", timeStr)
+	timeSign := SingData1("278ae090e15146d0932c45238b3d941a" + timeStr)
+	reqest.Header.Set("X-PPD-TIMESTAMP-SIGN", timeSign)
+	reqest.Header.Set("X-PPD-ACCESSTOKEN", accessToken)
+
+	response, httpErr := client.Do(reqest)
+	if httpErr != nil {
+		Log("query http error  ", httpErr)
+		return nil
+	}
+	defer response.Body.Close()
+
+	body, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		Log("query http error  ", err)
+		return nil
+	}
+
+
+	queryRes := &QueryResponse{}
+	queryRes.Result = -1
+	json.Unmarshal(body, queryRes)
+	return queryRes
+
+}
+
+/**
+投标接口
+@param listid    标的编号
+@param mondy     投标金额
+@param accessToken   用户访问token
+ */
+func BidMoneyNew(listid, money int, accessToken , name string, useHongbao bool) {
+	Log("++++++++++ new  bid  ", listid, " ", money, " ", accessToken)
+
+	var signedData string
+	if !useHongbao {
+		signedData = SingData1("")
+	} else {
+		signedData = SingData1("UseCoupontrue")
+	}
+
+	var bodyData []byte
+
+	if useHongbao {
+		message := BidRequestWithHongBao{ListingId:listid, Amount:money, UseCoupon:"true"}
+		bodyData, _ = json.Marshal(message)
+	} else {
+		message := BidRequest{ListingId:listid, Amount:money}
+		bodyData, _ = json.Marshal(message)
+	}
+
+	bodyStr := strings.ToLower(string(bodyData))
+
+
+	timeStr := time.Now().UTC().Format("2006-01-02 15:04:05")
+	reqest, _ := http.NewRequest("POST", "https://openapi.ppdai.com/listing/openapi/bid", strings.NewReader(bodyStr))
+	reqest.Header.Set("Content-Type", "application/json;charset=utf-8")
+	reqest.Header.Set("Connection", "keep-alive")
+	reqest.Header.Set("X-PPD-APPID", AppId1)
+	reqest.Header.Set("X-PPD-SIGN", signedData)
+	reqest.Header.Set("X-PPD-TIMESTAMP", timeStr)
+	timeSign := SingData1("278ae090e15146d0932c45238b3d941a" + timeStr)
+	reqest.Header.Set("X-PPD-TIMESTAMP-SIGN", timeSign)
+	reqest.Header.Set("X-PPD-ACCESSTOKEN", accessToken)
+
+	response, httpErr := client.Do(reqest)
+	if httpErr != nil {
+		Log("bid http error  ", httpErr)
+		return
+	}
+	defer response.Body.Close()
+
+	body, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		Log("bid http error  ", err)
+		return
+	}
+
+	type bidResponse struct {
+		ListingId int
+		Amount int
+		Result int
+		ResultMessage string
+		OrderId string
+	}
+	bidRes := &bidResponse{}
+	bidRes.Result = -1
+	json.Unmarshal(body, bidRes)
+	if len(bidRes.OrderId) == 0 {
+		Log("new bid fail ->  ", string(body))
+		return
+	}
+
+	time.Sleep(3 * time.Second)
+	queryRes := QueryOrder(bidRes.OrderId, strconv.Itoa(listid), accessToken)
+	if queryRes == nil {
+		Log("++++++++++++ query order error  ", listid, "  user: ", name)
+		return
+	}
+	if queryRes.ResultContent.ParticipationAmount > 0 {
+		Log("+++++++++++++++ new bid ok ", queryRes.ResultContent.ParticipationAmount,  "  ", listid, "   user: ", name, "  ", string(body))
+	} else {
+		Log("++++++++++++++++ new bid fail ", queryRes,  "  ", listid, "   user: ", name)
 	}
 
 }
@@ -318,6 +454,32 @@ func GetFastPersonInfo(listid int) *FastPersonInfo {
 	return &fastInfo
 }
 
+/**
+从web上获取标的一些信息
+ */
+func GetWebListStatic(listid int) *StaticResponse{
+	reqeustMessage := &InfoRequest{ListingId:strconv.Itoa(listid), Source:1}
+	bodyBytes, _ := json.Marshal(reqeustMessage)
+	bodyStr := string(bodyBytes)
+	bodyStr = strings.ToLower(bodyStr)
+	reqest, _ := http.NewRequest("POST", "https://invest.ppdai.com/api/invapi/LoanDetailPcService/showBorrowerStatistics", strings.NewReader(bodyStr))
+
+	reqest.Header.Set("Cookie", Cookie)
+	reqest.Header.Set("Connection", "keep-alive")
+	response, err := client.Do(reqest)
+	if err != nil {
+		return nil
+	}
+	defer response.Body.Close()
+
+	body, _ := ioutil.ReadAll(response.Body)
+
+
+	aa := &StaticResponse{}
+
+	json.Unmarshal(body, aa)
+	return aa
+}
 
 
 /**
@@ -617,8 +779,8 @@ func GetCanBidMoneyThroughApiDetail(detail *LoanDetail) (bool, int) {
 	lastCha := time.Now().Sub(lastSuccess).Hours() / 24
 
 
-	if detail.Amount > 10000 {
-		Log("no amount ", detail.Amount, detail.ListingId)
+	if detail.Amount > 15000 {
+		Log("amount too much  ", detail.Amount, detail.ListingId)
 		return false, 0
 	}
 

@@ -1,5 +1,7 @@
 package lib
 
+import "time"
+
 type InfoRequest struct {
 	ListingId string
 	Source int
@@ -40,10 +42,29 @@ type previousListItem struct {
 	ListType int                        // 201随借随还
 	Title string                        // 标题，可以判断是否是随借随还
 	StatusId int                        // 12 表示已经结清了
+	Months   int                        // 月份
+}
+
+type HistoryDebtItem struct {
+	Time time.Time
+	Debt float32
+}
+
+type HistoryDebtItemSlice []HistoryDebtItem
+
+func (c HistoryDebtItemSlice) Len() int {
+	return len(c)
+}
+func (c HistoryDebtItemSlice) Swap(i, j int) {
+	c[i], c[j] = c[j], c[i]
+}
+func (c HistoryDebtItemSlice) Less(i, j int) bool {
+	return c[i].Time.Sub(c[j].Time).Hours() < 0
 }
 
 type lonstatic struct {
 	ListingStatics liststatic
+	DebtAmountMap map[string]float32    // 那张负债图形
 	Normalnum int                       // 正常还款次数
 	OverdueLessNum int                  // 15天内逾期
 	OverdueMoreNum int                  // 15天以上逾期
@@ -139,5 +160,20 @@ type LoanDetail struct {
 }
 
 type LoanDetailList struct {
+	Result int
+	ResultMessage string
 	LoanInfos []LoanDetail
+}
+
+// ----------------------------------------------------------------------------------------
+type QueryContent struct {
+	BidId int
+	ListingId int
+	ParticipationAmount float32
+}
+
+type QueryResponse struct {
+	Result int
+	ResultMessage string
+	ResultContent QueryContent
 }
